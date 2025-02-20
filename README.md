@@ -18,5 +18,5 @@ For our Product enpoints, we are able to create products, retrieve all products,
 //
 ORDERS:
 For the Order endpoints, we have the ability to create an individual order or multiple orders, add a product to an order,
-remove a prodcut from an order, retrieve orders for a user, and retrive products from an order.
+remove a product from an order, retrieve orders for a user, and retrive products from an order.
 //
