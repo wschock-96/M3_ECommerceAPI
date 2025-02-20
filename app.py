@@ -3,11 +3,12 @@ from flask import Flask, request, jsonify
 from flask_marshmallow import Marshmallow
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey, Table, String, Column, select
-from marshmallow import ValidationError, Schema, fields
+from marshmallow import ValidationError
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 from typing import List
 from dotenv import load_dotenv
 import os
+from datetime import date
 
 app = Flask(__name__)
 load_dotenv()
@@ -27,23 +28,21 @@ ma = Marshmallow(app)
 order_product = Table(
     "order_product",
     Base.metadata,
-    Column("user_id", ForeignKey("users.user_id")),
     Column("order_id", ForeignKey("orders.order_id")),
     Column("product_id", ForeignKey("products.prod_id"))
 )
-
 
 # Users Table
 
 class User(Base):
     __tablename__ = 'users'
 
-    user_id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(primary_key=True, nullable=False)
     user_name: Mapped[str] = mapped_column(String(50), nullable=False)
     user_address: Mapped[str] = mapped_column(String(50))
     user_email: Mapped[str] = mapped_column(String(200), nullable=False)
 
-    orders: Mapped[List['Order']] = relationship(secondary=order_product, back_populates='users')
+    orders: Mapped[List['Order']] = relationship(back_populates='user')
 
 # Orders Table
 
@@ -51,11 +50,11 @@ class Order(Base):
     __tablename__ = "orders"
 
     order_id: Mapped[int] = mapped_column(primary_key=True)
-    order_date: Mapped[int] = mapped_column()
-    user_id: Mapped[int] = mapped_column()
+    order_date: Mapped[date] = mapped_column()
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.user_id'), nullable=False)
 
     products: Mapped[List['Product']] = relationship(secondary=order_product, back_populates='orders')
-    users: Mapped[List['User']] = relationship(secondary=order_product, back_populates="orders")
+    user: Mapped['User'] = relationship(back_populates="orders")
 
 
 # Products Table
@@ -75,16 +74,18 @@ class Product(Base):
 class UserSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = User
+        include_fk = True
         include_relationships = True
 
 class OrderSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Order
-        include_relationships = True
+        include_fk = True  
 
 class ProductSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Product
+        include_fk = True
         include_relationships = True
 
 user_schema = UserSchema()
@@ -126,6 +127,8 @@ def get_users():
 @app.route('/users/<int:user_id>', methods=['GET'])
 def get_user(user_id):
     user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'error message': f'user id not found'})
 
     return user_schema.jsonify(user), 200
 
@@ -188,6 +191,8 @@ def get_products():
 @app.route('/products/<int:product_id>', methods=['GET'])
 def get_product(product_id):
     product = db.session.get(Product, product_id)
+    if not product:
+        return jsonify({'error message': 'product does not exist'})
     return product_schema.jsonify(product), 200
 
 # UPDATE PRODUCT
@@ -239,7 +244,7 @@ def create_order():
     return order_schema.jsonify(new_order), 201 
 
 # ADD PRODUCT TO AN ORDER
-@app.route('/orders/<int:order_id>/add_product/<int:product_id>', methods=['POST'])
+@app.route('/orders/<int:order_id>/add_product/<int:prod_id>', methods=['POST'])
 def product_order(order_id, prod_id):
     order = db.session.get(Order, order_id)
     product = db.session.get(Product, prod_id)
@@ -280,13 +285,15 @@ def get_orders(user_id):
 @app.route('/orders/<int:order_id>/products', methods=['GET'])
 def products_from_order(order_id):
     order = db.session.get(Order, order_id)
+    print(f'\nPRINTING:\n', order)
     if not order:
         return jsonify({'message': 'Order not found'}), 404
     
-    return orders_schema.jsonify(order.products), 200 
+    return products_schema.jsonify(order.products), 200 
 
 if __name__ == '__main__':
     with app.app_context():
+        #db.drop_all()
         db.create_all()
 
     app.run(debug=True)
